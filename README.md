@@ -1,44 +1,47 @@
 # Prédiction du churn client (Telco)
 
-> Identifier à l'avance les clients d'un opérateur télécom qui risquent de résilier, comprendre pourquoi, et décider à qui proposer une offre de rétention pour maximiser le gain financier.
+> Un opérateur télécom perd des clients chaque mois. Ce projet cherche à repérer à l'avance ceux qui risquent de partir, à comprendre pourquoi, et à décider à qui proposer une offre de rétention.
 
-## 1. Problématique
+## 1. Le problème
 
-Acquérir un client coûte plus cher que d'en garder un. Le projet répond à trois questions :
+Garder un client coûte moins cher que d'en trouver un nouveau. Je cherche donc à répondre à trois questions :
 
-1. **Prédire** : quels clients vont partir ? (classification binaire)
-2. **Expliquer** : quels facteurs poussent au départ ? (SHAP)
-3. **Décider** : à qui proposer une offre, sachant qu'elle a un coût ? (seuil basé sur le coût)
+1. **Qui va partir ?** (classification binaire)
+2. **Pourquoi ?** (explication avec SHAP)
+3. **À qui proposer une offre**, sachant qu'elle coûte de l'argent ? (choix du seuil selon le coût)
 
-## 2. Données
+## 2. Les données
 
-- **Source** : Telco Customer Churn (IBM, version Cognos), [lien Kaggle à ajouter], licence : [à vérifier]
-- **Taille** : 7 043 clients, 33 colonnes, fichier `.xlsx` à placer dans `data/Telco_customer_churn.xlsx`
-- **Cible** : `Churn Value` (0/1), environ 26,5 % de départs (classes déséquilibrées)
-- **Colonnes exclues** : `Churn Score`, `CLTV`, `Churn Reason` (fuite de données) ; identifiants et colonnes géographiques (sans valeur prédictive)
+- **Source** : Telco Customer Churn (IBM, version Cognos, données d'exemple fictives), [Kaggle](https://www.kaggle.com/datasets/yeanzc/telco-customer-churn-ibm-dataset), licence : « Other » sur Kaggle (voir la description de la page). Les données ne sont pas incluses dans ce dépôt : il faut les télécharger depuis Kaggle.
+- **Taille** : 7 043 clients et 33 colonnes, dans un fichier `.xlsx` à placer dans `data/Telco_customer_churn.xlsx`.
+- **Cible** : `Churn Value` (0 ou 1). Environ 26,5 % des clients sont partis, donc les classes sont déséquilibrées.
+- **Colonnes écartées** : `Churn Reason` n'existe que pour les clients partis, donc elle contient la réponse. J'ai aussi écarté `Churn Score` et `CLTV` par prudence, ainsi que les identifiants et la géographie. J'ai retiré `Gender` : le churn est presque le même chez les femmes et les hommes (26,9 % contre 26,2 %).
+- Il reste 18 variables.
 
-## 3. Méthodologie
+## 3. La démarche
 
-1. Analyse exploratoire : [`notebooks/01_eda.ipynb`](notebooks/01_eda.ipynb)
-2. Préparation : découpage train/test stratifié, puis encodage et transformations ajustés sur le train uniquement
-3. Modélisation : régression logistique (baseline), Random Forest, XGBoost, comparés par validation croisée stratifiée
-4. Évaluation : recall, precision, PR-AUC (pas l'accuracy seule)
-5. Explicabilité (SHAP) et seuil de décision basé sur le coût métier
+1. Explorer les données : [`notebooks/01_eda.ipynb`](notebooks/01_eda.ipynb)
+2. Préparer : découpage train/test stratifié, puis encodage ajusté sur le train seulement, pour éviter toute fuite de données.
+3. Modéliser : une régression logistique comme point de départ, puis Random Forest et XGBoost, comparés par validation croisée.
+4. Évaluer avec le recall, la precision et la PR-AUC. L'accuracy serait trompeuse, puisque 73 % des clients restent.
+5. Expliquer avec SHAP et choisir le seuil de décision d'après le coût.
 
-## 4. Principaux enseignements de l'EDA
+## 4. Ce que l'exploration m'a appris
 
-- **Classes déséquilibrées** : 26,5 % de churn, donc évaluation par recall et PR-AUC.
-- **Le risque est concentré au début** : 47,4 % de churn la première année contre 9,5 % après 4 ans.
-- **Le contrat est le signal le plus fort** : 42,7 % de churn en contrat mensuel contre 2,8 % sur 2 ans.
-- **Autres profils à risque** : chèque électronique (45,3 %), fibre optique (41,9 %), absence de support technique ou de sécurité en ligne (environ 42 %).
-- **Le prix seul n'explique pas le churn** : les partis paient plus cher en global, mais à type d'internet égal ils ne paient pas plus (effet de composition, paradoxe de Simpson).
-- **Qualité des données** : aucun doublon ; les 11 valeurs manquantes de `Total Charges` sont des clients à 0 mois d'ancienneté, remplacées par 0.
-- **Redondance** : `Total Charges` est très corrélée à `Tenure Months` (0,83).
+- **Un client sur quatre part.** Un modèle qui répondrait toujours « il reste » aurait 73,5 % de bonnes réponses sans rien apprendre. Je juge donc les modèles sur autre chose que l'accuracy.
+- **Le départ se joue au début.** 47,4 % des clients partent la première année, contre 9,5 % après quatre ans.
+- **Le contrat est le signal le plus net.** 42,7 % de churn en contrat mensuel, 2,8 % sur deux ans.
+- **La fibre part plus que le DSL, quel que soit le contrat** (54,6 % contre 32,2 % en contrat mensuel). Ce n'est donc pas seulement parce que ses clients sont plus souvent en contrat mensuel.
+- **Le prix n'explique pas tout.** Les clients partis paient plus cher en global, mais à type d'internet égal ils ne paient pas plus. Ils sont surtout en fibre, la formule la plus chère.
+- **Les options de service demandent de la prudence.** Les clients sans option sont surtout en contrat mensuel, ce qui gonfle l'écart. Une fois le contrat fixé, `Device Protection` n'a presque plus d'écart (47,6 % contre 43,6 % en mensuel). Sans `Tech Support` ou `Online Security`, le churn en contrat mensuel reste environ 20 points plus haut (50 à 51 % contre 30 %).
+- **Les clients en couple ou avec des personnes à charge partent moins** (19,7 % contre 33,0 %, et 6,5 % contre 32,6 %).
+- **Le chèque électronique (45,3 %) et les seniors (41,7 %) ressortent aussi**, mais je n'ai pas vérifié si c'est un effet du contrat.
+- **Côté données** : aucun doublon. Les 11 valeurs manquantes de `Total Charges` sont des clients à 0 mois d'ancienneté, pas encore facturés, donc remplacées par 0. Cette colonne est corrélée à 0,83 avec l'ancienneté : elle fait presque doublon.
 
-![Taux de churn par contrat](images/churn_par_contrat.png)
+![Taux de churn par contrat, type d'internet et mode de paiement](images/churn_par_contrat.png)
 ![Taux de churn par tranche d'ancienneté](images/churn_par_anciennete.png)
 
-> Ces résultats sont des associations, pas des relations de cause à effet. Détails complets dans le notebook.
+> Ce sont des associations, pas des causes. Le détail de chaque analyse est dans le notebook.
 
 ## 5. Résultats de la modélisation
 
@@ -56,23 +59,24 @@ Acquérir un client coûte plus cher que d'en garder un. Le projet répond à tr
 
 - [À compléter après la modélisation]
 
-## 7. Reproduction
+## 7. Reproduire le projet
 
 ```bash
-git clone https://github.com/[ton-pseudo]/churn-prediction.git
+git clone https://github.com/hassnalahdili/churn-prediction.git
 cd churn-prediction
 python -m venv venv
 venv\Scripts\activate          # Windows
 pip install -r requirements.txt
-jupyter notebook
 ```
+
+Télécharge ensuite le fichier depuis la page Kaggle indiquée plus haut, place-le dans `data/Telco_customer_churn.xlsx`, puis lance `jupyter notebook`.
 
 ## 8. Limites
 
-- Dataset fictif de taille modérée, sans dimension temporelle ni données d'usage : résultats non transposables tels quels à une entreprise réelle
-- Analyse basée sur des associations, sans test statistique ni preuve de causalité
-- Variables sensibles (`Gender`, `Senior Citizen`) : leur usage pour cibler des offres pose une question d'équité
+- Les données sont fictives (IBM), assez petites, sans dimension temporelle ni données d'usage : les résultats ne se transposent pas tels quels à une vraie entreprise.
+- Mes analyses montrent des associations, pas des causes. Je n'ai fait aucun test statistique, et je n'ai contrôlé qu'une variable à la fois (le contrat).
+- `Senior Citizen` est une variable sensible : s'en servir pour cibler des offres pose une question d'équité. J'ai retiré `Gender`, qui n'apportait rien.
 
 ## Auteur
 
-**HASSNA LAHDILI** : [lien LinkedIn] | hassna.hlahdili@gmail.com
+**HASSNA LAHDILI** : [LinkedIn](https://www.linkedin.com/in/hassna-lahdili-2b2422321) | hassna.hlahdili@gmail.com
